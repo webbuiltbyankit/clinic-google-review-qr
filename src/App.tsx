@@ -11,8 +11,14 @@ import {
   Zap,
   FileCode,
   FileImage,
+  Upload,
 } from 'lucide-react';
-import { generateQRPng, generateQRSvg, triggerDownload } from './utils/qrGenerator';
+import {
+  generateQRPng,
+  generateQRSvg,
+  triggerDownload,
+  PRESET_LOGOS,
+} from './utils/qrGenerator';
 
 const SAMPLE_GOOGLE_REVIEW_URL =
   'https://www.google.com/maps/place/Artistry+Clinic/@18.4506052,73.8969507,17z/data=!4m8!3m7!1s0x3bc2eb90ca4aefa3:0x8848ab3e2ea6a762!8m2!3d18.4506052!4d73.8969507!9m1!1b1!16s%2Fg%2F11sywx930y!18m1!1e1?entry=ttu&g_ep=EgoyMDI2MDkwOS4wIKXMDSoASAFQAw%3D%3D';
@@ -27,20 +33,19 @@ export const App: React.FC = () => {
   const [isGenerating, setIsGenerating] = useState<boolean>(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Auto-generate on initial load for Artistry Clinic
-  React.useEffect(() => {
-    handleGenerate(SAMPLE_GOOGLE_REVIEW_URL);
-  }, []);
+  // Logo settings
+  const [selectedLogoPreset, setSelectedLogoPreset] = useState<'google' | 'medical' | 'star' | 'custom' | 'none'>('google');
+  const [customLogoUrl, setCustomLogoUrl] = useState<string>('');
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => {
-      setToastMessage(null);
-    }, 3000);
+  const getEffectiveLogoUrl = (): string => {
+    if (selectedLogoPreset === 'none') return '';
+    if (selectedLogoPreset === 'custom') return customLogoUrl;
+    return PRESET_LOGOS[selectedLogoPreset] || '';
   };
 
-  const handleGenerate = async (targetUrl?: string) => {
+  const handleGenerate = async (targetUrl?: string, logoOverride?: string) => {
     const urlToUse = (targetUrl !== undefined ? targetUrl : urlInput).trim();
+    const logoToUse = logoOverride !== undefined ? logoOverride : getEffectiveLogoUrl();
 
     if (!urlToUse) {
       setError('Please enter a Google Maps or Google Review URL.');
@@ -54,10 +59,9 @@ export const App: React.FC = () => {
     setIsGenerating(true);
 
     try {
-      // Generate both PNG and SVG locally using the qrcode library
       const [png, svg] = await Promise.all([
-        generateQRPng(urlToUse, 2048), // 2048px high resolution for print
-        generateQRSvg(urlToUse),
+        generateQRPng(urlToUse, 2048, logoToUse),
+        generateQRSvg(urlToUse, logoToUse),
       ]);
 
       setPngDataUrl(png);
@@ -70,12 +74,45 @@ export const App: React.FC = () => {
     }
   };
 
+  // Initial load
+  React.useEffect(() => {
+    handleGenerate(SAMPLE_GOOGLE_REVIEW_URL, PRESET_LOGOS.google);
+  }, []);
+
+  const handleLogoChange = (preset: 'google' | 'medical' | 'star' | 'custom' | 'none') => {
+    setSelectedLogoPreset(preset);
+    let logoUrl = '';
+    if (preset === 'custom') {
+      logoUrl = customLogoUrl;
+    } else if (preset !== 'none') {
+      logoUrl = PRESET_LOGOS[preset];
+    }
+    handleGenerate(urlInput, logoUrl);
+  };
+
+  const handleCustomLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const result = event.target?.result as string;
+        setCustomLogoUrl(result);
+        setSelectedLogoPreset('custom');
+        handleGenerate(urlInput, result);
+        showToast('Custom logo uploaded successfully');
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleClear = () => {
     setUrlInput('');
     setActiveUrl('');
     setPngDataUrl('');
     setSvgData('');
     setError(null);
+    setSelectedLogoPreset('none');
+    setCustomLogoUrl('');
     showToast('Cleared input and QR code');
   };
 
@@ -108,6 +145,11 @@ export const App: React.FC = () => {
     handleGenerate(SAMPLE_GOOGLE_REVIEW_URL);
   };
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
+
   return (
     <div className="container">
       {/* Header */}
@@ -118,7 +160,7 @@ export const App: React.FC = () => {
         <h1>Clinic Google Review QR Generator</h1>
         <p>
           Convert your clinic's Google Maps or Google Review link into a crisp, high-resolution static
-          QR code for counters, business cards, and print materials.
+          QR code with optional center logo.
         </p>
       </header>
 
@@ -178,8 +220,74 @@ export const App: React.FC = () => {
             </div>
           </div>
 
+          {/* Logo Center Picker */}
+          <div className="form-group" style={{ marginTop: '1.2rem' }}>
+            <label className="form-label" style={{ marginBottom: '0.6rem', display: 'block' }}>
+              Center Logo Icon (Optional)
+            </label>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className={`mini-btn ${selectedLogoPreset === 'google' ? 'active-logo-btn' : ''}`}
+                onClick={() => handleLogoChange('google')}
+                style={{ padding: '0.6rem', justifyContent: 'center' }}
+              >
+                Google G
+              </button>
+              <button
+                type="button"
+                className={`mini-btn ${selectedLogoPreset === 'star' ? 'active-logo-btn' : ''}`}
+                onClick={() => handleLogoChange('star')}
+                style={{ padding: '0.6rem', justifyContent: 'center' }}
+              >
+                Review Star
+              </button>
+              <button
+                type="button"
+                className={`mini-btn ${selectedLogoPreset === 'medical' ? 'active-logo-btn' : ''}`}
+                onClick={() => handleLogoChange('medical')}
+                style={{ padding: '0.6rem', justifyContent: 'center' }}
+              >
+                Medical Cross
+              </button>
+              <button
+                type="button"
+                className={`mini-btn ${selectedLogoPreset === 'none' ? 'active-logo-btn' : ''}`}
+                onClick={() => handleLogoChange('none')}
+                style={{ padding: '0.6rem', justifyContent: 'center' }}
+              >
+                No Logo
+              </button>
+            </div>
+
+            {/* Custom Upload Button */}
+            <div style={{ marginTop: '0.6rem' }}>
+              <label
+                htmlFor="custom-logo-input"
+                className="mini-btn"
+                style={{
+                  width: '100%',
+                  justifyContent: 'center',
+                  padding: '0.5rem',
+                  cursor: 'pointer',
+                  borderStyle: 'dashed',
+                }}
+              >
+                <Upload size={14} /> Upload Custom Clinic Logo (PNG / JPG / SVG)
+              </label>
+              <input
+                id="custom-logo-input"
+                type="file"
+                accept="image/*"
+                onChange={handleCustomLogoUpload}
+                style={{ display: 'none' }}
+              />
+            </div>
+          </div>
+
           {/* Action Buttons: Generate & Clear */}
-          <div className="btn-group">
+          <div className="btn-group" style={{ marginTop: '1.5rem' }}>
             <button
               id="btn-generate-qr"
               type="button"
@@ -207,19 +315,13 @@ export const App: React.FC = () => {
               <CheckCircle2 size={16} className="spec-icon" /> 30% Error Correction (Level H)
             </div>
             <div className="spec-item">
+              <CheckCircle2 size={16} className="spec-icon" /> Center Logo Overlay Enabled
+            </div>
+            <div className="spec-item">
               <CheckCircle2 size={16} className="spec-icon" /> High-Res 2048px PNG Output
             </div>
             <div className="spec-item">
-              <CheckCircle2 size={16} className="spec-icon" /> Pure Black & White Contrast
-            </div>
-            <div className="spec-item">
               <CheckCircle2 size={16} className="spec-icon" /> Professional Vector SVG
-            </div>
-            <div className="spec-item">
-              <CheckCircle2 size={16} className="spec-icon" /> 4-Module White Quiet Zone
-            </div>
-            <div className="spec-item">
-              <CheckCircle2 size={16} className="spec-icon" /> Unmodified Exact URL
             </div>
           </div>
         </section>

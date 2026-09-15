@@ -430,6 +430,13 @@ body {
   color: #fff;
 }
 
+.active-logo-btn {
+  background: rgba(56, 189, 248, 0.2) !important;
+  border-color: rgba(56, 189, 248, 0.6) !important;
+  color: var(--primary) !important;
+  font-weight: 600;
+}
+
 /* Download Actions */
 .download-grid {
   width: 100%;
